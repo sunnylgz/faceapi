@@ -16,6 +16,7 @@ import numpy as np
 import facenet
 import align.detect_face
 from scipy import misc
+from scipy import stats
 import tensorflow as tf
 
 __debug = True # = __debug__
@@ -29,6 +30,7 @@ factor = 0.709 # scale factor
 margin = 44 # Margin for the crop around the bounding box (height, width) in pixels.
 image_size = 160 # Image size (height, width) of cropped face in pixels.
 facenet_model = "/home/ubuntu/share/source_code/facenet/20170512-110547/20170512-110547.pb"
+c_normal_mean_stddev = [0.7, 0.2]
 
 def crop_face(img, pnet, rnet, onet):
   img_size = np.asarray(img.shape)[0:2]
@@ -131,6 +133,15 @@ def face_compare(image1,
       # Load the model
       facenet.load_model(facenet_model)
 
+      if __debug:
+        end_t = time.time()
+        end_c = time.clock()
+
+        elapsed_real_time = end_t - start_t
+        elapsed_user_time = end_c - start_c
+        print("load face model cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+        start_t,start_c = end_t,end_c
+
       # Get input and output tensors
       images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
       embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
@@ -153,6 +164,7 @@ def face_compare(image1,
   if __debug:
     print("the distance between 2 input is ", dist)
 
+  ret_dict['score'] = 1.0 - stats.norm(c_normal_mean_stddev[0], c_normal_mean_stddev[1]).cdf(dist)
   return ret_dict 
 
 def face_location(image, options=None):
@@ -193,6 +205,7 @@ def parse_arguments(argv):
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
+    parser.add_argument('--debug', action='store_true', help='Run in debugging mode') # TODO: not used it. Use global variable __debug instead
     return parser.parse_args(argv)
 
 if __name__ == '__main__':
