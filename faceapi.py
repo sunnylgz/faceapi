@@ -1,5 +1,8 @@
 #! /usr/bin/env python3
 
+# TODO:
+# 20171217, multi exception catch. multi exit() from function face_compare
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -7,38 +10,155 @@ from __future__ import print_function
 import sys
 import os
 import argparse
+import io
 import base64
+import numpy as np
 import facenet
 import align.detect_face
+from scipy import misc
+import tensorflow as tf
 
-__debug = True
+__debug = True # = __debug__
+
+if __debug:
+  import datetime,time
+
+minsize = 20 # minimum size of fac
+threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
+factor = 0.709 # scale factor
+margin = 44 # Margin for the crop around the bounding box (height, width) in pixels.
+image_size = 160 # Image size (height, width) of cropped face in pixels.
+facenet_model = "/home/ubuntu/share/source_code/facenet/20170512-110547/20170512-110547.pb"
+
+def crop_face(img, pnet, rnet, onet):
+  img_size = np.asarray(img.shape)[0:2]
+  bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+  if len(bounding_boxes) > 1:
+    raise RuntimeError("detected multi faces")
+  if len(bounding_boxes) < 1:
+    raise RuntimeError("no faces detected")
+  det = np.squeeze(bounding_boxes[0,0:4])
+  bb = np.zeros(4, dtype=np.int32)
+  bb[0] = np.maximum(det[0]-margin/2, 0)
+  bb[1] = np.maximum(det[1]-margin/2, 0)
+  bb[2] = np.minimum(det[2]+margin/2, img_size[1])
+  bb[3] = np.minimum(det[3]+margin/2, img_size[0])
+  cropped = img[bb[1]:bb[3],bb[0]:bb[2],:]
+  aligned = misc.imresize(cropped, (image_size, image_size), interp='bilinear')
+  prewhitened = facenet.prewhiten(aligned)
+
+  return prewhitened
+
 def face_compare(image1,
                  image2,
                  options=None):
 
+  ret_dict = {
+   'status': 0,
+   'score': 0.0,
+   'error': 'No Error',
+  }
+
   image1 = base64.b64decode(image1)
   image2 = base64.b64decode(image2)
-
   if __debug:
     with open("image1.bin", "wb") as f:
       f.write(image1)
     with open("image2.bin", "wb") as f:
       f.write(image2)
 
-  ret_dict = {
-   'status': 0,
-   'score': 0.1,
-   'error': "No Error",
-  }
+  #image1 = tf.image.decode_image(image1, channels=3)
+  #image2 = tf.image.decode_image(image2, channels=3)
+  #img = misc.imread(os.path.expanduser("1.jpg"), mode='RGB')
+  # TODO: need to add except handling for io.BytesIO()
+  try:
+    img1 = misc.imread(io.BytesIO(image1), mode='RGB')
+    img2 = misc.imread(io.BytesIO(image2), mode='RGB')
+  except OSError:
+    ret_dict['error'] = 'IO Error'
+    ret_dict['status'] = 1
+    return ret_dict
+
+  if __debug:
+    start_t = time.time()
+    start_c = time.clock()
+
+  with tf.Graph().as_default():
+    sess = tf.Session()
+    with sess.as_default():
+      pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
+
+  if __debug:
+    end_t = time.time()
+    end_c = time.clock()
+
+    elapsed_real_time = end_t - start_t
+    elapsed_user_time = end_c - start_c
+    print("create mtcnn cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+    start_t,start_c = end_t,end_c
+
+  # detect face
+  images = []
+  try:
+    prewhitened1 = crop_face(img1, pnet, rnet, onet)
+    images.append(prewhitened1)
+  except RuntimeError as e:
+    ret_dict['error'] = str(e) + "while parsing image 1"
+    ret_dict['status'] = 1
+    return ret_dict
+
+  try:
+    prewhitened2 = crop_face(img2, pnet, rnet, onet)
+    images.append(prewhitened2)
+  except RuntimeError as e:
+    ret_dict['error'] = str(e) + "while parsing image 2"
+    ret_dict['status'] = 1
+    return ret_dict
+
+  if __debug:
+    end_t = time.time()
+    end_c = time.clock()
+
+    elapsed_real_time = end_t - start_t
+    elapsed_user_time = end_c - start_c
+    print("align faces cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+    start_t,start_c = end_t,end_c
+
+  with tf.Graph().as_default():
+
+    with tf.Session() as sess:
+
+      # Load the model
+      facenet.load_model(facenet_model)
+
+      # Get input and output tensors
+      images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+      embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+      phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+
+      # Run forward pass to calculate embeddings
+      feed_dict = { images_placeholder: images, phase_train_placeholder:False }
+      emb = sess.run(embeddings, feed_dict=feed_dict)
+
+  if __debug:
+    end_t = time.time()
+    end_c = time.clock()
+
+    elapsed_real_time = end_t - start_t
+    elapsed_user_time = end_c - start_c
+    print("calculate face features cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+    start_t,start_c = end_t,end_c
+
+  dist = np.sqrt(np.sum(np.square(np.subtract(emb[0,:], emb[1,:]))))
+  if __debug:
+    print("the distance between 2 input is ", dist)
+
   return ret_dict 
 
 def face_location(image, options=None):
 
   image = base64.b64decode(image)
 
-  minsize = 20 # minimum size of fac
-  threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
-  factor = 0.709 # scale factor
   with tf.Graph().as_default():
     #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
     sess = tf.Session()#config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
@@ -50,11 +170,17 @@ def face_location(image, options=None):
   return bounding_boxes
 
 def main(args):
-  with open("base64.txt", "r") as f:
-    test_data = f.readline()
+
+  if len(args.input_files) < 2:
+    print("Must provide at least 2 files to test compare()")
+    return
+  with open(args.input_files[0], "r") as f:
+    test_data1 = f.readline()
+  with open(args.input_files[1], "r") as f:
+    test_data2 = f.readline()
   #test_data = test_data.encode(encoding='utf-8')
   #print(test_data)
-  ret_dict = face_compare(test_data, test_data)
+  ret_dict = face_compare(test_data1, test_data2)
   print("status: ", ret_dict["status"])
   print("error: ", ret_dict["error"])
   print("score: ", ret_dict["score"])
@@ -62,10 +188,9 @@ def main(args):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
+    parser.add_argument('input_files', type=str, nargs='+', help='Input files (coded as base64, and raw is jpg/png')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
-    parser.add_argument('--margin', type=int,
-        help='Margin for the crop around the bounding box (height, width) in pixels.', default=44)
     parser.add_argument('--gpu_memory_fraction', type=float,
         help='Upper bound on the amount of GPU memory that will be used by the process.', default=1.0)
     return parser.parse_args(argv)
