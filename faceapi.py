@@ -49,7 +49,7 @@ def crop_face(img, pnet, rnet, onet):
   aligned = misc.imresize(cropped, (image_size, image_size), interp='bilinear')
   prewhitened = facenet.prewhiten(aligned)
 
-  return prewhitened
+  return prewhitened,bb
 
 def face_compare(image1,
                  image2,
@@ -59,6 +59,7 @@ def face_compare(image1,
    'status': 0,
    'score': 0.0,
    'error': 'No Error',
+   'bounding_box': [[0,0,0,0],[0,0,0,0]]
   }
 
   image1 = base64.b64decode(image1)
@@ -101,17 +102,20 @@ def face_compare(image1,
 
   # detect face
   images = []
+  bounding_boxes = []
   try:
-    prewhitened1 = crop_face(img1, pnet, rnet, onet)
+    prewhitened1,bb1 = crop_face(img1, pnet, rnet, onet)
     images.append(prewhitened1)
+    bounding_boxes.append(bb1)
   except RuntimeError as e:
     ret_dict['error'] = str(e) + "while parsing image 1"
     ret_dict['status'] = 1
     return ret_dict
 
   try:
-    prewhitened2 = crop_face(img2, pnet, rnet, onet)
+    prewhitened2,bb2 = crop_face(img2, pnet, rnet, onet)
     images.append(prewhitened2)
+    bounding_boxes.append(bb2)
   except RuntimeError as e:
     ret_dict['error'] = str(e) + "while parsing image 2"
     ret_dict['status'] = 1
@@ -165,6 +169,7 @@ def face_compare(image1,
     print("the distance between 2 input is ", dist)
 
   ret_dict['score'] = 1.0 - stats.norm(c_normal_mean_stddev[0], c_normal_mean_stddev[1]).cdf(dist)
+  ret_dict['bounding_box']=bounding_boxes
   return ret_dict 
 
 def face_location(image, options=None):
@@ -193,9 +198,7 @@ def main(args):
   #test_data = test_data.encode(encoding='utf-8')
   #print(test_data)
   ret_dict = face_compare(test_data1, test_data2)
-  print("status: ", ret_dict["status"])
-  print("error: ", ret_dict["error"])
-  print("score: ", ret_dict["score"])
+  print(ret_dict)
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
