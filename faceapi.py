@@ -29,8 +29,8 @@ threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
 factor = 0.709 # scale factor
 margin = 44 # Margin for the crop around the bounding box (height, width) in pixels.
 image_size = 160 # Image size (height, width) of cropped face in pixels.
-facenet_model = "/home/ubuntu/share/source_code/facenet/20170512-110547/20170512-110547.pb"
-c_normal_mean_stddev = [0.7, 0.2]
+facenet_model = "/home/ubuntu/share/source_code/faceapi/checkpoint/20171219-004017/20171219-004017_49975.pb"
+c_normal_mean_stddev = [0.9, 0.2]
 
 def crop_face(img, pnet, rnet, onet):
   img_size = np.asarray(img.shape)[0:2]
