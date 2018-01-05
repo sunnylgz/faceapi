@@ -32,14 +32,39 @@ image_size = 160 # Image size (height, width) of cropped face in pixels.
 facenet_model = "/home/ubuntu/share/source_code/faceapi/checkpoint/20171219-004017/20171219-004017_49975.pb"
 c_normal_mean_stddev = [0.9, 0.2]
 
+MIN_INPUT_SIZE = 80
+def faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor):
+  #print(img.shape)
+  h=img.shape[0]
+  w=img.shape[1]
+  minl=np.amin([h, w])
+  #print("original image is %dx%d" % (w, h))
+
+  scale = 1
+  if minl > MIN_INPUT_SIZE:
+    scale = minl // MIN_INPUT_SIZE
+    hs=int(np.ceil(h/scale))
+    ws=int(np.ceil(w/scale))
+    #im_data = imresample(img, (hs, ws))
+    im_data = misc.imresize(img, (hs, ws), interp='bilinear')
+    #print("scaled image is %dx%d" % (ws, hs))
+  else:
+    im_data = img
+
+  face_locations, points = align.detect_face.detect_face(im_data, minsize, pnet, rnet, onet, threshold, factor)
+  #for face_location in face_locations:
+  #  face_location[0:4] = face_location[0:4] * scale
+
+  return face_locations, points, scale
+
 def crop_face(img, pnet, rnet, onet):
   img_size = np.asarray(img.shape)[0:2]
-  bounding_boxes, _ = align.detect_face.detect_face(img, minsize, pnet, rnet, onet, threshold, factor)
+  bounding_boxes, _, scale = faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor)
   if len(bounding_boxes) > 1:
     raise RuntimeError("detected multi faces")
   if len(bounding_boxes) < 1:
     raise RuntimeError("no faces detected")
-  det = np.squeeze(bounding_boxes[0,0:4])
+  det = np.squeeze(bounding_boxes[0,0:4]) * scale
   bb = np.zeros(4, dtype=np.int32)
   bb[0] = np.maximum(det[0]-margin/2, 0)
   bb[1] = np.maximum(det[1]-margin/2, 0)
