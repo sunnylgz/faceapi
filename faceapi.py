@@ -18,6 +18,7 @@ import align.detect_face
 from scipy import misc
 from scipy import stats
 import tensorflow as tf
+from model_sel import facenet_model,c_normal_mean_stddev
 
 __debug = True # = __debug__
 
@@ -29,8 +30,6 @@ threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
 factor = 0.709 # scale factor
 margin = 44 # Margin for the crop around the bounding box (height, width) in pixels.
 image_size = 160 # Image size (height, width) of cropped face in pixels.
-facenet_model = "/home/ubuntu/share/source_code/faceapi/checkpoint/20171219-004017/20171219-004017_49975.pb"
-c_normal_mean_stddev = [0.9, 0.2]
 
 MIN_INPUT_SIZE = 80
 def faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor):
