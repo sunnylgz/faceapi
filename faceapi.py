@@ -198,7 +198,12 @@ def face_compare(image1,
 
 def face_location(image, options=None):
 
-  image = base64.b64decode(image)
+  raw_image = base64.b64decode(image)
+  try:
+    img = misc.imread(io.BytesIO(raw_image), mode='RGB')
+  except OSError:
+    print("Error: face_location() can't read image")
+    return ()
 
   with tf.Graph().as_default():
     #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
@@ -206,7 +211,9 @@ def face_location(image, options=None):
     with sess.as_default():
       pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
 
-  bounding_boxes, _ = align.detect_face.detect_face(image, minsize, pnet, rnet, onet, threshold, factor)
+  bounding_boxes, _, scale = faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor)
+  for bounding_box in bounding_boxes:
+    bounding_box[0:4] = bounding_box[0:4] * scale
 
   return bounding_boxes
 
@@ -215,19 +222,34 @@ def main(args):
   if len(args.input_files) < 2:
     print("Must provide at least 2 files to test compare()")
     return
-  with open(args.input_files[0], "r") as f:
-    test_data1 = f.readline()
-  with open(args.input_files[1], "r") as f:
-    test_data2 = f.readline()
-  #test_data = test_data.encode(encoding='utf-8')
-  #print(test_data)
-  ret_dict = face_compare(test_data1, test_data2)
-  print(ret_dict)
+
+  if args.image:
+    with open(args.image, "r") as f:
+      image = f.readline()
+
+    bounding_boxes = face_location(image)
+    print("finding faces on %s, " % (args.image), bounding_boxes)
+
+  i = 0
+  while i+1 < len(args.input_files):
+    print("*" * 20)
+    print("compare ", args.input_files[i], args.input_files[i+1])
+    with open(args.input_files[i], "r") as f:
+      test_data1 = f.readline()
+    with open(args.input_files[i+1], "r") as f:
+      test_data2 = f.readline()
+    #test_data = test_data.encode(encoding='utf-8')
+    #print(test_data)
+    ret_dict = face_compare(test_data1, test_data2)
+    print(ret_dict)
+    i += 2
+    print("*" * 20)
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     
     parser.add_argument('input_files', type=str, nargs='+', help='Input files (coded as base64, and raw is jpg/png')
+    parser.add_argument('--image', type=str, help='Test face_location on this file (coded as base64, and raw is jpg/png')
     parser.add_argument('--image_size', type=int,
         help='Image size (height, width) in pixels.', default=160)
     parser.add_argument('--gpu_memory_fraction', type=float,
