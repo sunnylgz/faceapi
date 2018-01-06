@@ -49,6 +49,28 @@ if __debug:
   print("create mtcnn cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
   start_t,start_c = end_t,end_c
 
+with tf.Graph().as_default():
+  with tf.Session() as sess:
+    # Load the model
+    facenet.load_model(facenet_model)
+
+    if __debug:
+      end_t = time.time()
+      end_c = time.clock()
+
+      elapsed_real_time = end_t - start_t
+      elapsed_user_time = end_c - start_c
+      print("load face model cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+      start_t,start_c = end_t,end_c
+
+    # Get input and output tensors
+    images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+    embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+    phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+
+    # Run forward pass to calculate embeddings
+    emb_fun = lambda images : sess.run(embeddings, feed_dict={ images_placeholder: images, phase_train_placeholder:False })
+
 MIN_INPUT_SIZE = 80
 def faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor):
   #print(img.shape)
@@ -158,30 +180,7 @@ def face_compare(image1,
     print("align faces cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
     start_t,start_c = end_t,end_c
 
-  with tf.Graph().as_default():
-
-    with tf.Session() as sess:
-
-      # Load the model
-      facenet.load_model(facenet_model)
-
-      if __debug:
-        end_t = time.time()
-        end_c = time.clock()
-
-        elapsed_real_time = end_t - start_t
-        elapsed_user_time = end_c - start_c
-        print("load face model cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
-        start_t,start_c = end_t,end_c
-
-      # Get input and output tensors
-      images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-      embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-      phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
-
-      # Run forward pass to calculate embeddings
-      feed_dict = { images_placeholder: images, phase_train_placeholder:False }
-      emb = sess.run(embeddings, feed_dict=feed_dict)
+  emb = emb_fun(images)
 
   if __debug:
     end_t = time.time()
