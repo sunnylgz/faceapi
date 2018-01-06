@@ -31,6 +31,24 @@ factor = 0.709 # scale factor
 margin = 44 # Margin for the crop around the bounding box (height, width) in pixels.
 image_size = 160 # Image size (height, width) of cropped face in pixels.
 
+if __debug:
+  start_t = time.time()
+  start_c = time.clock()
+
+with tf.Graph().as_default():
+  sess = tf.Session()
+  with sess.as_default():
+    pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
+
+if __debug:
+  end_t = time.time()
+  end_c = time.clock()
+
+  elapsed_real_time = end_t - start_t
+  elapsed_user_time = end_c - start_c
+  print("create mtcnn cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
+  start_t,start_c = end_t,end_c
+
 MIN_INPUT_SIZE = 80
 def faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor):
   #print(img.shape)
@@ -109,20 +127,6 @@ def face_compare(image1,
   if __debug:
     start_t = time.time()
     start_c = time.clock()
-
-  with tf.Graph().as_default():
-    sess = tf.Session()
-    with sess.as_default():
-      pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
-
-  if __debug:
-    end_t = time.time()
-    end_c = time.clock()
-
-    elapsed_real_time = end_t - start_t
-    elapsed_user_time = end_c - start_c
-    print("create mtcnn cost (real/user): %.2fs/%.2fs" % (elapsed_real_time, elapsed_user_time))
-    start_t,start_c = end_t,end_c
 
   # detect face
   images = []
@@ -204,12 +208,6 @@ def face_location(image, options=None):
   except OSError:
     print("Error: face_location() can't read image")
     return ()
-
-  with tf.Graph().as_default():
-    #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
-    sess = tf.Session()#config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-    with sess.as_default():
-      pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
 
   bounding_boxes, _, scale = faster_face_detect(img, minsize, pnet, rnet, onet, threshold, factor)
   for bounding_box in bounding_boxes:
